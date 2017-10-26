@@ -3,55 +3,51 @@ var dateFormat = require('dateformat');
 var router = express.Router();
 
 /**
- * @api {get} /experiments 1. Request a list of registered experiments
+ * @api {get} /experiments 1. Get a list of all available experiments 
  * @apiVersion 1.0.0
  * @apiName GetExperiments
  * @apiGroup Experiments
  *
- * @apiSuccess {Object} experimentID identifier of an experiment
- * @apiSuccess {String} experimentID.href link to the experiment
- *
- * @apiParam {Boolean} [details] if set, more detailed information for each experiment is given
- * @apiParam {String} [workflow] filters results by the given user, e.g. 'hpcfapix'
+ * @apiParam {String} [workflow] filters results by the given workflow, e.g. 'ms2'
  *
  * @apiExample {curl} Example usage:
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/experiments
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/experiments?workflow=hpcfapix&details
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/experiments
+ *
+ * @apiSuccess {Object} executionID       Identifier of an experiment
+ * @apiSuccess {String} executionID.href  Link to the experiment's details
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
  *     {
- *       "AVUWoIRDGMPeuCn4l-cl": {
- *         "href": "http://mf.excess-project.eu:3030/v1/mf/experiments/AVUWoIRDGMPeuCn4l-cl?workflow=hpcfapix"
+ *       "AVZ-ll9FGYwmTvCuSnjW": {
+ *          "href": "http://mf.excess-project.eu:3033/v1/phantom_mf/experiments/AVZ-ll9FGYwmTvCuSnjW?workflow=ms2"
  *       },
- *       "AVNXMbaBGMPeuCn4bMfv": {
- *         "href": "http://mf.excess-project.eu:3030/v1/mf/experiments/AVNXMbaBGMPeuCn4bMfv?workflow=hoppe"
+ *       "AVZ-kZTjGYwmTvCuSnZV": {
+ *          "href": "http://mf.excess-project.eu:3033/v1/phantom_mf/experiments/AVZ-kZTjGYwmTvCuSnZV?workflow=ms2"
  *       },
- *       "AVNXMsA_GMPeuCn4bMj7": {
- *         "href": "http://mf.excess-project.eu:3030/v1/mf/experiments/AVNXMsA_GMPeuCn4bMj7?workflow=dmitry"
- *       }
+ *       "AVZ-j2hEGYwmTvCuSnVE": {
+ *          "href": "http://mf.excess-project.eu:3033/v1/phantom_mf/experiments/AVZ-j2hEGYwmTvCuSnVE?workflow=ms2"
+ *       },
+ *       ...
  *     }
  *
- * @apiError NotFound Not Found.
+ * @apiError ExperimentsNotAvailable No experiments found.
  *
  * @apiErrorExample Error-Response:
- *     HTTP/1.1 404 NotFound
+ *     HTTP/1.1 404 Not Found
  *     {
- *       "error": "Not Found."
+ *       "error": "No experiments found."
  *     }
  */
 router.get('/', function(req, res, next) {
     var client = req.app.get('elastic'),
-      mf_server = req.app.get('mf_server') + '/mf',
-      details = req.query.details,
-      workflows = req.query.workflows,
+      workflow = req.query.workflow,
       json = {},
-      query = '',
       size = 1000;
 
     query = '{ "query": { "match_all": {} } }';
-    if (typeof workflows !== 'undefined') {
-        query = '{ "query": { "term": { "_parent": "' + workflows + '" } } }';
+    if (typeof workflow !== 'undefined') {
+        query = '{ "query": { "term": { "_parent": "' + workflow + '" } } }';
     }
 
     client.search({
@@ -73,13 +69,9 @@ router.get('/', function(req, res, next) {
         }, function(error, response) {
             if (response.hits !== undefined) {
                 var results = response.hits.hits;
-                if (is_defined(details)) {
-                    json = get_details(results);
-                } else {
-                    json = get_workflows(mf_server, results);
-                }
+                json = get_details(results);
             } else {
-                json.error = error;
+                json.error = "No experiments found";
             }
             res.json(json);
         });
@@ -114,63 +106,37 @@ function get_details(results) {
     return response;
 }
 
-function get_workflows(mf_server, results) {
-    var keys = Object.keys(results),
-      experimentID = '',
-      workflow = '',
-      response = {};
-    keys.forEach(function(key) {
-        experimentID = results[key]._id;
-        workflow = results[key]._parent;
-        var json = {};
-        json.href = mf_server + '/experiments/' + experimentID + '?workflow=' + workflow;
-        response[experimentID] = json;
-    });
-    return response;
-}
-
 /**
- * @api {get} /experiments/:experimentID 2. Request a registered experiment with given experiment ID
+ * @api {get} /experiments/:experimentID 2. Get a registered experiment with given execution ID
  * @apiVersion 1.0.0
- * @apiName GetExperimentsID
+ * @apiName GetExperimentsByID
  * @apiGroup Experiments
  *
- * @apiParam {String} experimentID identifier of an experiment
- * @apiParam {String} workflow the username the given experiment is associated with, e.g. 'hpcfapix'
- * @apiParam {Boolean} [extends] returns detailed information about tasks, if present
- *
- * @apiSuccess {String} application application name of the experiment
- * @apiSuccess {String} host hostname of the system
- * @apiSuccess {String} user user identifier of the experiment
- * @apiSuccess {String} timestamp timestamp, when the experiment is registered
- * @apiSuccess {String} job_id job identifier of the experiment
+ * @apiParam {String} experimentID      Identifier of an experiment
  *
  * @apiExample {curl} Example usage:
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/experiments/AVNXMXcvGMPeuCn4bMe0?workflow=hpcfapix
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/experiments/AVZ-ll9FGYwmTvCuSnjW?workflow=ms2
+ *
+ * @apiSuccess {String} [application]  Name of the workflow
+ * @apiSuccess {String} [task]         Name of the task (sub-component of the workflow)
+ * @apiSuccess {String} [host]         Name of the target platform, where the experiment is conducted
+ * @apiSuccess {String} [timestamp]    Timestamp when the experiment is registered
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
  *     {
- *       "application":"vector_scal01",
- *       "host":"fe.excess-project.eu",
- *       "user":"hpcfapix",
- *       "@timestamp":"2016-02-15T12:42:22.000",
- *       "job_id":"143249.fe.excess-project.eu"
+ *        "application": "ms2",
+ *        "task": "t1",
+ *        "host": "node01",
+ *        "@timestamp": "2016-08-12T13:49:59"
  *     }
  *
- * @apiError NoWorkflow No workflow is given.
- *
- * @apiErrorExample Error-Response:
- *     HTTP/1.1 404 NoWorkflow
- *     {
- *       "error": "URL parameter 'workflow' is missing"
- *     }
+ * @apiError DatabaseError Elasticsearch specific error message.
  */
-router.get('/:id', function(req, res, next) {
+router.get('/:experimentID', function(req, res, next) {
     var client = req.app.get('elastic'),
-      id = req.params.id,
+      id = req.params.experimentID,
       workflow = req.query.workflow,
-      extend = req.query.extends,
       json = {},
       size = 1000;
 
@@ -193,26 +159,7 @@ router.get('/:id', function(req, res, next) {
             if (json['@timestamp'] !== 'undefined') {
                 delete json.timestamp;
             }
-            if (is_defined(extend)) {
-                client.get({
-                    index: 'mf',
-                    type: 'workflows',
-                    id: workflow
-                }, function(error, response) {
-                    if (response.found) {
-                        var source = response._source;
-                        json.tasks = [];
-                        for (var i in source.tasks) {
-                            json.tasks.push(source.tasks[i].name);
-                        }
-                    } else {
-                        json.error = error;
-                    }
-                    res.json(json);
-                });
-            } else {
-                res.json(json);
-            }
+            res.json(json);
         } else {
             res.json(error);
         }
@@ -225,63 +172,78 @@ router.get('/:id', function(req, res, next) {
  * @apiName PostExperiments
  * @apiGroup Experiments
  *
- * @apiParam {String} workflowID identifier of a workflow for which an experiment shall be created, e.g. 'hpcfapix'
+ * @apiParam {String} workflowID          Identifier for the workflow for which the experiment shall be created, e.g. 'ms2'
+ * @apiParam {String} [application]       Name of the application, same as the workflow ID
+ * @apiParam {String} [host]              Hostname of the target platform
+ * @apiParam {String} [author]            Author, like who is registering the experiment
  *
  * @apiExample {curl} Example usage:
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/experiments/hpcfapix
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/experiments/ms2
  *
  * @apiParamExample {json} Request-Example:
  *     {
  *       "application": "vector_scal01",
- *       "host": "fe.excess-project.eu",
- *       "user": "hpcfapix",
- *       "@timestamp": "2016-02-15T12:42:22.000",
- *       "job_id": "143249.fe.excess-project.eu"
+ *       "host": "node01",
+ *       "author": "hpcfapix"
  *     }
  *
- * @apiParam {String} [application] application name, provided while registering a new experiment
- * @apiParam {String} [host] hostname of the system
- * @apiParam {String} [user] username, like who is registering the experiment
- * @apiParam {String} timestamp timestamp, when the experiment is registered
- * @apiParam {String} [job_id] job identifier, provided while registering a new experiment
- *
- * @apiSuccess {Object} experimentID identifier of an experiment
- * @apiSuccess {String} experimentID.href link to the experiment
+ * @apiSuccess {Object} executionID       Identifier of the new registered experiment
+ * @apiSuccess {String} executionID.href  Link to the new registered experiment
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
  *     {
  *       "AVXt3coOz5chEwIt8_Ma": {
- *         "href": "http://mf.excess-project.eu:3030/v1/mf/experiments/AVXt3coOz5chEwIt8_Ma?workflow=hpcfapix"
+ *         "href": "http://mf.excess-project.eu:3033/v1/phantom_mf/experiments/AVXt3coOz5chEwIt8_Ma?workflow=ms2"
  *       }
  *     }
+ * @apiError WorkflowNotFound No workflow as given is found.
  *
+ * @apiErrorExample Error-Response:
+ *     HTTP/1.1 404 Not Found
+ *     {
+ *       "error": "No workflow as '" + workflowID + "' is found."
+ *     }
  */
-router.post('/:id', function(req, res, next) {
-    var id = req.params.id.toLowerCase(),
-      mf_server = req.app.get('mf_server') + '/mf',
+router.post('/:workflowID', function(req, res, next) {
+    var id = req.params.workflowID.toLowerCase(),
+      mf_server = req.app.get('mf_server'),
       client = req.app.get('elastic');
 
     var body = req.body;
-    var now = new Date();
-    now = dateFormat(now, "yyyy-mm-dd'T'HH:MM:ss");
-    body['@timestamp'] = now;
+    body['@timestamp'] = dateFormat(new Date(), "yyyy-mm-dd'T'HH:MM:ss.l");
 
-    client.index({
+    /*check if given workflow exists */
+    client.get({
         index: 'mf',
-        type: 'experiments',
-        parent: id,
-        body: body
-    },function(error, response) {
-        if (error) {
-            res.json(error);
-        } else {
-            var json = {};
-            json[response._id] = {};
-            json[response._id].href = mf_server + '/experiments/' + response._id + '?workflow=' + id;
+        type: 'workflows',
+        id: id
+    }, function(err, result) {
+        if (err) {
+            res.status(500);
+            return next(err);
+        }
+        /*if the workflow can be found */
+        if(result !== undefined) {
+            client.index({
+                index: 'mf',
+                type: 'experiments',
+                parent: id,
+                body: body
+            },function(error, response) {
+                if (error) {
+                    res.json(error);
+                } else {
+                    res.send(response._id);
+                }
+            });
+        }
+        /*if no such workflow is found */
+        else {
+            json.error = "No workflow as " + id +" is found.";
             res.json(json);
         }
-    });
+    }); 
 });
 
 module.exports = router;

@@ -1,58 +1,177 @@
 var express = require('express');
+var dateFormat = require('dateformat');
 var http = require('http');
 var async = require('async');
 var router = express.Router();
 
 /**
- * @api {post} /metrics 1. Send bulk of metrics
+ * @api {get} /metrics/:workflowID/:taskID/:experimentID 1. Get all sampled metrics' names and average values with given workflowID, taskID and experimentID
  * @apiVersion 1.0.0
- * @apiName PostBulkMetrics
+ * @apiName GetMetrics
  * @apiGroup Metrics
  *
- * @apiParam {String} WorkflowID identifier of a workflow
- * @apiParam {String} task identifier of a task
- * @apiParam {String} ExperimentID identifier of an experiment
- * @apiParam {String} type type of the metric, e.g. power, temperature, and so on
- * @apiParam {String} host hostname of the system
- * @apiParam {String} timestamp timestamp, when the metric is collected
- * @apiParam {String} metric value of the metric
+ * @apiParam {String} workflowID        Name of the workflow
+ * @apiParam {String} taskID            Name of the task
+ * @apiParam {String} executionID       Identifier of the experiment
  *
  * @apiExample {curl} Example usage:
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/metrics
- *
- * @apiParamExample {json} Request-Example:
- *     [
- *         {
- *              "WorkflowID":"hpcfapix",
- *              "task":"vector_scal01",
- *              "ExperimentID":"AVUWnydqGMPeuCn4l-cj",
- *              "type":"power", "host": "node01.excess-project.eu",
- *              "@timestamp": "2016-02-15T12:46:48.749",
- *              "GPU1:power": "168.519"
- *          }, {
- *              "WorkflowID":"hoppe",
- *              "task":"testing",
- *              "ExperimentID":"AVNXMXcvGMPeuCn4bMe0",
- *              "type": "power",
- *              "host": "node01.excess-project.eu",
- *              "@timestamp": "2016-02-15T12:43:48.524",
- *              "GPU0:power": "152.427"
- *          }
- *     ]
- *
- * @apiSuccess {String} href links to all updated experiments' profiled metrics
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/metrics/ms2/t1/AVNXMXcvGMPeuCn4bMe0
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
  *     [
- *           "http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix_vector_scal01/AVUWnydqGMPeuCn4l-cj",
- *           "http://mf.excess-project.eu:3030/v1/mf/profiles/hoppe_testing/AVNXMXcvGMPeuCn4bMe0"
+ *       {
+ *         "device0:current":
+ *            {
+ *              "count":55,
+ *              "min":0,
+ *              "max":0,
+ *              "avg":0,
+ *              "sum":0
+ *            },
+ *         "device0:vbus":
+ *            {
+ *              "count":55,
+ *              "min":0,
+ *              "max":0,
+ *              "avg":0,
+ *              "sum":0
+ *            },
+ *          "device0:vshunt":
+ *            {
+ *              "count":55,
+ *              "min":0,
+ *              "max":0,
+ *              "avg":0,
+ *              "sum":0
+ *            },
+ *          "device0:power":
+ *            {
+ *              "count":55,
+ *              "min":0,
+ *              "max":0,
+ *              "avg":0,
+ *              "sum":0
+ *            }
+ *       }
  *     ]
  *
+ * @apiError DatabaseError Elasticsearch specific error message.
+ */
+router.get('/:workflowID/:taskID/:experimentID', function(req, res, next) {
+    var client = req.app.get('elastic'),
+      workflow = req.params.workflowID.toLowerCase(),
+      task = req.params.taskID.toLowerCase(),
+      experiment = req.params.experimentID,
+      size = 1000,
+      json = [];
+
+    var data = {},
+      metrics = {},
+      index = workflow + '_' + task;
+    
+    client.search({
+        index: index,
+        type: experiment,
+        size: size
+    }, function (error, response) {
+        if(error) {
+            res.status(500);
+            return next(error);
+        }
+      if(response.hits !== undefined) {
+          var results = response.hits.hits,
+            keys = Object.keys(results),
+            items = {};
+
+          /* filter keys like local_timestamp, server_timestamp, host, task, and type */
+          keys.forEach(function (key) {
+              items = results[key]._source;
+              delete items.local_timestamp;
+              delete items.server_timestamp;
+              delete items.host;
+              delete items.task;
+              delete items.TaskID;
+              delete items.type;
+              for (var item in items) {
+                  metrics[item] = item;
+              }
+          });
+      }
+
+      async.each(metrics, function(metric, inner_callback) {
+          client.search({
+              index: index,
+              type: experiment,
+              searchType: 'count',
+              body: aggregation_by(metric)
+            }, function(error, response) {
+              if (error) {
+                inner_callback(null);
+              }
+              var aggs = response.aggregations;
+                data[metric] = aggs[metric + '_Stats'];
+              inner_callback(null);
+            });
+          }, function() {
+            json.push(data);
+            res.json(json);
+      });
+    });
+});
+
+/**
+ * @api {post} /metrics 3. Send an array of metrics
+ * @apiVersion 1.0.0
+ * @apiName PostBulkMetrics
+ * @apiGroup Metrics
+ *
+ * @apiParam (body) {String} WorkflowID      Name of the application
+ * @apiParam (body) {String} TaskID          Name of the task
+ * @apiParam (body) {String} ExperimentID    Identifier of the experiment
+ * @apiParam (body) {String} [type]          Type of the metric, e.g. power, temperature, and so on
+ * @apiParam (body) {String} [host]          Hostname of the target platform
+ * @apiParam (body) {String} local_timestamp Local timestamp, when the metric is collected
+ * @apiParam (body) {String} metric          Name and value of the metric
+ *
+ * @apiExample {curl} Example usage:
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/metrics
+ *
+ * @apiParamExample {json} Request-Example:
+ *     [
+ *       {
+ *         "WorkflowID": "ms2",
+ *         "ExperimentID": "AVUWnydqGMPeuCn4l-cj",
+ *         "TaskID": "t2.1",
+ *         "local_timestamp": "2016-02-15T12:43:48.749",
+ *         "type": "power",
+ *         "host": "node01.excess-project.eu",
+ *         "GPU1:power": "168.519"
+ *       }, {
+ *         "WorkflowID": "ms2",
+ *         "ExperimentID":"AVNXMXcvGMPeuCn4bMe0",
+ *         "TaskID": "t2.2",
+ *         "local_timestamp": "2016-02-15T12:46:48.524",
+ *         "type": "power",
+ *         "host": "node01.excess-project.eu",
+ *         "GPU0:power": "152.427"
+ *       }
+ *     ]
+ *
+ * @apiSuccess {String} href links to all updated profiled metrics
+ *
+ * @apiSuccessExample Success-Response:
+ *     HTTP/1.1 200 OK
+ *     [
+ *       "http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/ms2/t2.1/AVUWnydqGMPeuCn4l-cj",
+ *       "http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/ms2/t2.2/AVNXMXcvGMPeuCn4bMe0"
+ *     ]
+ *
+ * @apiError DatabaseError Elasticsearch specific error message.
  */
 router.post('/', function(req, res, next) {
     var data = req.body,
-      mf_server = req.app.get('mf_server') + '/mf',
+      mf_server = req.app.get('mf_server'),
       client = req.app.get('elastic'),
       bulk_data = [];
 
@@ -61,13 +180,23 @@ router.post('/', function(req, res, next) {
     for (i = 0; i != data.length; ++i) {
         var action = JSON.parse(JSON.stringify(tmp));
         var index = data[i].WorkflowID;
-        if (data[i].task) {
-          index = index + '_' + data[i].task;
+        if (data[i].TaskID) {
+          index = index + '_' + data[i].TaskID;
         } else {
           index = index + '_all';
         }
-        // index: no white spaces allowed
-        index = index.replace(' ', '_');
+        /*
+        if(data[i]['@timestamp'] == undefined) {
+          data[i]['@timestamp'] = dateFormat(new Date(), "yyyy-mm-dd'T'HH:MM:ss.l");
+        }*/
+        data[i].server_timestamp = dateFormat(new Date(), "yyyy-mm-dd'T'HH:MM:ss.l");
+        if(data[i].local_timestamp == undefined) {
+          data[i].local_timestamp = data[i].server_timestamp;
+        } else {
+          var tmp_value = parseInt(data[i].local_timestamp);
+          data[i].local_timestamp = dateFormat(new Date(tmp_value), "yyyy-mm-dd'T'HH:MM:ss.l");
+        }
+
         action.index._index = index.toLowerCase();
         action.index._type = data[i].ExperimentID;
         delete data[i].WorkflowID;
@@ -85,7 +214,7 @@ router.post('/', function(req, res, next) {
         }
         var json = [];
         for (var i in response.items) {
-            json.push(mf_server + '/profiles/' +
+            json.push(mf_server + '/phantom_mf/profiles/' +
               response.items[i].create._index.replace('_all', '/all') +
               '/' + response.items[i].create._type);
         }
@@ -94,58 +223,52 @@ router.post('/', function(req, res, next) {
 });
 
 /**
- * @api {post} /metrics/:workflowID/:experimentID 2. Send one metric with given workflow ID and experiment ID
+ * @api {post} /metrics/:workflowID/:taskID/:experimentID 2. Send a metric with given workflow ID, task ID, and experiment ID
  * @apiVersion 1.0.0
- * @apiName PostMetrics
+ * @apiName PostMetric
  * @apiGroup Metrics
  *
- * @apiParam {String} workflowID identifier of a workflow
- * @apiParam {String} experimentID identifier of an experiment
- * @apiParam {String} type type of the metric, e.g. power, temperature, and so on
- * @apiParam {String} host hostname of the system
- * @apiParam {String} timestamp timestamp, when the metric is collected
- * @apiParam {String} metric value of the metric
+ * @apiParam {String} WorkflowID              Name of the application
+ * @apiParam {String} TaskID                  Name of the task
+ * @apiParam {String} ExperimentID            Identifier of the experiment
+ * @apiParam (body) {String} [type]           Type of the metric, e.g. power, temperature, and so on
+ * @apiParam (body) {String} [host]           Hostname of the target platform
+ * @apiParam (body) {String} local_timestamp  Local timestamp, when the metric is collected
+ * @apiParam (body) {String} metric           Name and value of the metric
  *
  * @apiExample {curl} Example usage:
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/metrics/hpcfapix/AVNXMXcvGMPeuCn4bMe0?task=vector_scal01
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/metrics/ms2/t1/AVNXMXcvGMPeuCn4bMe0
  *
  * @apiParamExample {json} Request-Example:
  *     {
  *       "type": "power",
- *       "host": "fe.excess-project.eu",
- *       "@timestamp": "2016-02-15T12:42:22.000",
+ *       "host": "node01.excess-project.eu",
+ *       "local_timestamp": "2016-02-15T12:42:22.000",
  *       "GPU0:power": "152.427"
  *     }
  *
- * @apiSuccess {Object} metricID identifier of the sent metric
- * @apiSuccess {String} metricID.href link to the experiment with updated metrics
+ * @apiSuccess {Object} metricID       Identifier of the sent metric
+ * @apiSuccess {String} metricID.href  Link to the experiment with updated metrics
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
  *     {
  *       "AVXt3coOz5chEwIt8_Ma": {
- *         "href": "http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01/AVNXMXcvGMPeuCn4bMe0"
+ *         "href": "http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/ms2/t1/AVNXMXcvGMPeuCn4bMe0"
  *       }
  *     }
  *
+ * @apiError DatabaseError Elasticsearch specific error message.
  */
-router.post('/:workflowID/:experimentID', function(req, res, next) {
+router.post('/:workflowID/:taskID/:experimentID', function(req, res, next) {
     var workflowID = req.params.workflowID.toLowerCase(),
       experimentID = req.params.experimentID,
-      mf_server = req.app.get('mf_server') + '/mf',
-      taskID = req.query.task.toLowerCase(),
+      taskID = req.params.taskID.toLowerCase(),
+      mf_server = req.app.get('mf_server'),
       client = req.app.get('elastic'),
       index_missing = false;
 
-    // taskID will later be used as an index, no white spaces allowed
-    taskID = taskID.replace(' ', '_');
-
-    var index = workflowID;
-    if (typeof taskID == 'undefined') {
-        taskID = 'manual_monitoring';
-    }
-
-    index = workflowID + '_' + taskID;
+    var index = workflowID + '_' + taskID;
 
     async.series([
         function(callback) {
@@ -167,7 +290,7 @@ router.post('/:workflowID/:experimentID', function(req, res, next) {
                 var options = {
                     host: 'localhost',
                     path: '/' + index,
-                    port: 9200,
+                    port: 9400,
                     method: 'PUT',
                     headers: headers
                 };
@@ -175,7 +298,7 @@ router.post('/:workflowID/:experimentID', function(req, res, next) {
                 var http_request = http.request(options, function(res) {
                     res.setEncoding('utf-8');
                     res.on('data', function(data) {
-                        //console.log('incoming: ' + data);
+                        console.log('incoming: ' + data);
                     });
                     res.on('end', function() {
                         callback(null, '2=created');
@@ -198,31 +321,43 @@ router.post('/:workflowID/:experimentID', function(req, res, next) {
                 req.body['@timestamp'] = req.body.Timestamp;
                 delete req.body.Timestamp;
             }
+            /*
+            if(req.body['@timestamp'] == undefined) {
+              req.body['@timestamp'] = dateFormat(new Date(), "yyyy-mm-dd'T'HH:MM:ss.l");
+            }*/
+            req.body.server_timestamp = dateFormat(new Date(), "yyyy-mm-dd'T'HH:MM:ss.l");
+            if(req.body.local_timestamp == undefined) {
+              req.body.local_timestamp = req.body.server_timestamp;
+            }
+
+            /* fix for timestamps having whitespaces: 2016-08-24T10:24:07.  6 */
+            if (req.body['@timestamp'] !== undefined) {
+                var replaced = req.body['@timestamp'].replace(/ /g, '0');
+                req.body['@timestamp'] = replaced;
+            }
             client.index({
                 index: index,
                 type: experimentID,
                 body: req.body
             },function(error, response) {
-                if (error) {
-                    res.status(500);
-                    callback(null, 'id not found');
-                    console.log(error);
-                    return;
-                }
-                var json = {};
-                json[response._id] = {};
-                json[response._id].href = mf_server + '/profiles/' + workflowID;
-                if (typeof taskID !== 'undefined') {
-                    json[response._id].href += '/' + taskID;
-                }
-                json[response._id].href += '/' + experimentID;
-                res.json(json);
-                callback(null, '3=' + JSON.stringify(json));
-            });
-        }
+              if (error) {
+                res.status(500);
+                callback(null, 'id not found');
+                return;
+              }
+              var json = {};
+              json[response._id] = {};
+              json[response._id].href = mf_server + '/phantom_mf/profiles/' + workflowID;
+              if (typeof taskID !== 'undefined') {
+                  json[response._id].href += '/' + taskID;
+              }
+              json[response._id].href += '/' + experimentID;
+              res.json(json);
+              callback(null, '3');
+          });
+      }
     ],
     function(err, results){
-        //console.log(results);
     });
 });
 
@@ -300,5 +435,49 @@ var bodyString =
       '}' +
    '}' +
 '}';
+
+function aggregation_by(field_name) {
+    return '{' +
+        '"aggs": {' +
+            '"' + field_name + '_Stats" : {' +
+                '"stats" : {' +
+                    '"field" : "' + field_name + '"' +
+                '}' +
+            '},' +
+            '"Minimum_' + field_name + '": {' +
+                '"top_hits": {' +
+                    '"size": 1,' +
+                    '"sort": [' +
+                        '{' +
+                            '"' + field_name + '": {' +
+                                '"order": "asc"' +
+                            '}' +
+                        '}' +
+                    ']' +
+                '}' +
+            '},' +
+            '"Maximum_' + field_name + '": {' +
+                '"top_hits": {' +
+                    '"size": 1,' +
+                    '"sort": [' +
+                        '{' +
+                            '"' + field_name + '": {' +
+                                '"order": "desc"' +
+                            '}' +
+                        '}' +
+                    ']' +
+                '}' +
+            '}' +
+        '}' +
+    '}';
+}
+
+function isEmpty(obj) {
+  for(var key in obj) {
+    if(obj.hasOwnProperty(key))
+      return false;
+  }
+  return true;
+}
 
 module.exports = router;

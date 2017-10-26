@@ -1,25 +1,22 @@
-# EXCESS ATOM Monitoring Server
+# PHANTOM monitoring server
 
-> ATOM enables users to monitor applications at run-time with ease. In contrast to existing frameworks, our solution profiles applications with high resolution, focuses on energy measurements, and supports a heterogeneous infrastructure.
+> PHANTOM monitoring server is one part of the PHANTOM monitoring framework, which supports monitoring of performance and power metrics for heterogeneous platforms and hardwares. 
 
 
-## Motivation
-Reducing the energy consumption is a leading design constraint of current and future HPC systems. Aside from investing into energy-efficient hardware, optimizing applications is key to substantially reduce the energy consumption of HPC cluster. Software developers, however, are usually in the dark when it gets to energy consumption of their applications; HPC clusters rarely provide capabilities to monitor energy consumption on a fine granular level. Predicting the energy consumption of specific applications is even more difficult when the allocated hardware resources vary at each execution. In order to lower the hurdle of energy-aware development, we present ATOM---a light-weight neAr-real Time mOnitoring fraMework.
+## Introduction
+The PHANTOM monitoring server is composed of two components: a web server and a data storage system. The web server provides various functionalities for data query and data analysis via RESTful APIs with documents in JSON format. The server's URL are "localhost:3033" by default.
 
 
 ## Prerequisites
-
-The monitoring server provides the RESTful API to the [monitoring agent][agent]. The server is implemented using Node.js, and connects to Elasticsearch to store and access metric data. Before you start installing the required components, please note that the installation and setup steps mentioned below assume that you are running a current Linux as operating system. The installation was tested with Ubuntu 14.04 LTS as well as with Scientific Linux 6 (Carbon).
-
+The monitoring server receives data from the [PHANTOM monitoring client][client] via RESTful interfaces. The server is implemented using Node.js, and connects to Elasticsearch to store and access metric data. Before you start installing the required components, please note that the installation and setup steps mentioned below assume that you are running a current Linux as operating system. The installation was tested with Ubuntu 16.04 LTS as well as with Scientific Linux 6 (Carbon).
 Before you can proceed, please clone the repository:
 
 ```bash
-git clone git://github.com/excess-project/monitoring-server.git
+git clone https://github.com/hpcfapix/phantom_monitoring_server.git
 ```
 
 
 ### Dependencies
-
 This project requires the following dependencies to be installed:
 
 | Component         | Homepage                                           | Version   |
@@ -30,27 +27,19 @@ This project requires the following dependencies to be installed:
 
 
 #### Installation of Elasticsearch
-
-Please execute the following commands to install version 1.4.4 of `Elasticsearch`. Alternatively, you can use your operating system's software installer to install a current version of `Elasticsearch`.
+Please execute the following commands to install version 2.4.0 of `Elasticsearch`. Alternatively, you can use your operating system's software installer to install a current version of `Elasticsearch`.
 
 ```bash
 cd /tmp
-wget https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-1.4.4.tar.gz
-tar -xf elasticsearch-1.4.4.tar.gz
-sudo mv elasticsearch-1.4.4 /usr/local/elasticsearch
+wget https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-2.4.0.tar.gz
+tar -xf elasticsearch-2.4.0.tar.gz
+sudo mv elasticsearch-2.4.0 /usr/local/elasticsearch
 ```
 
-You should then be able to start `Elasticsearch` on port 9200 by executing
-
-```bash
-sudo service elasticsearch start
-```
-
-with root permissions.
+Start `Elasticsearch` on port 9400 (default port is 9200, which can be changed in the file elasticsearch.yml) with root permissions.
 
 
 #### Installation of Node.js
-
 Please install a current version of Node.js (>= 0.9) as follows:
 
 ```bash
@@ -61,7 +50,6 @@ sudo mv node-v0.12.0-linux-x64 /usr/local/nodejs
 
 
 #### Installation of npm
-
 When using Ubuntu, for example, please install npm as follows:
 
 ```bash
@@ -72,127 +60,121 @@ Again, please feel free to use your operating system's software installer, inste
 
 
 ## Installation
-
 This section assumes that you've successfully installed all required dependencies as described in the previous paragraphs. When being in the project's directory, execute the following command:
 
 ```bash
 npm install
 ```
 
-
-## Start the server
-
-First, verify once more, that a Elasticsearch database is running
-
+To ease the installation and preparation process, there is one shell script provided, which downloads and installs all the dependencies and packages. Please try the following command instead of all the commands before:
 ```bash
-curl localhost:9200
+./setup.sh
 ```
 
-Next, you can start the monitoring server by executing
 
+## Start/Stop the server
+Start a Elasticsearch database and then the monitoring web server by executing:
 ```bash
-npm start
+./start.sh
 ```
 
-from within the project's directory. This command will start the server on
-port 3000. Please browse to http://localhost:3030 to check if the startup
-was successful.
+You can use the following commands to verify if the database and the server are running
+
+```bash
+curl localhost:9400
+curl localhost:3033
+```
+
+After tthe usage, the server can be stopped by:
+```bash
+./stop.sh
+```
 
 
 ## RESTful Queries
-
 It follows a list of some RESTful queries to demonstrate its usage:
 
 ```bash
 # WORKFLOWS
-GET /v1/dreamcloud/mf/workflows
-GET /v1/dreamcloud/mf/workflows?details
-GET /v1/dreamcloud/mf/workflows/power_stream
-GET /v1/dreamcloud/mf/workflows/ms2
+GET  /v1/phantom_mf/workflows
+GET  /v1/phantom_mf/workflows/:application_id
+PUT  /v1/phantom_mf/workflows/:application_id -d '{...}'
 
 # EXPERIMENTS
-GET /v1/mf/experiments
-GET /v1/mf/experiments?details
-GET /v1/mf/experiments?workflows=ms2
-GET /v1/mf/experiments?workflows=ms2&details
-GET /v1/mf/experiments/AU3DzYggYHjgymAd2iPp?workflow=ms2
-GET /v1/mf/experiments/AU3DzYggYHjgymAd2iPp?workflow=ms2&extends=tak
+GET  /v1/phantom_mf/experiments
+GET  /v1/phantom_mf/experiments/:execution_id?workflow=:application_id
+POST /v1/phantom_mf/experiments/:application_id -d '{...}'
+
+# METRICS
+GET  /v1/phantom_mf/metrics/:application_id/:task_id/:execution_id
+POST /v1/phantom_mf/metrics -d '{...}'
+POST /v1/phantom_mf/metrics/:application_id/:task_id/:execution_id -d '{...}'
 
 # PROFILES
-GET /v1/dreamcloud/mf/profiles/ms2/
-GET /v1/dreamcloud/mf/profiles/ms2/task_1
-GET /v1/dreamcloud/mf/profiles/ms2/task_1/AU3DzggYHjgymAdip
+GET /v1/phantom_mf/profiles/:application_id
+GET /v1/phantom_mf/profiles/:application_id/:task_id
+GET /v1/phantom_mf/profiles/:application_id/:task_id/:execution_id
+GET /v1/phantom_mf/profiles/:application_id/:task_id/:execution_id?from=...&to=...
 
 # RUNTIME
-GET /v1/dreamcloud/mf/runtime/ms2/task_1/AU3DzggYHjgymAdip
-GET /v1/dreamcloud/mf/runtime/ms2/AU3DzYggYHjgymAd2iPp
+GET /v1/phantom_mf/runtime/:application_id/:execution_id
+GET /v1/phantom_mf/runtime/:application_id/:task_id/:execution_id
+
+# STATISTICS
+GET /v1/phantom_mf/statistics/:application_id?metric=...
+GET /v1/phantom_mf/statistics/:application_id?metric=...&host=...
+GET /v1/phantom_mf/statistics/:application_id?metric=...&from=...&to=...
+GET /v1/phantom_mf/statistics/:application_id?metric=...&host=...&from=...&to=...
+GET /v1/phantom_mf/statistics/:application_id/:execution_id?metric=...
+GET /v1/phantom_mf/statistics/:application_id/:execution_id?metric=...&host=...
+GET /v1/phantom_mf/statistics/:application_id/:execution_id?metric=...&from=...&to=...
+GET /v1/phantom_mf/statistics/:application_id/:execution_id?metric=...&host=...&from=...&to=...
+GET /v1/phantom_mf/statistics/:application_id/:task_id/:execution_id?metric=...
+GET /v1/phantom_mf/statistics/:application_id/:task_id/:execution_id?metric=...&host=...
+GET /v1/phantom_mf/statistics/:application_id/:task_id/:execution_id?metric=...&from=...&to=...
+GET /v1/phantom_mf/statistics/:application_id/:task_id/:execution_id?metric=...&host=...&from=...&to=...
+
+# RESOURCES (Resource Manager)
+GET  /v1/phantom_rm/resources
+GET  /v1/phantom_rm/resources/:platform_id
+PUT  /v1/phantom_rm/resources/:platform_id -d '{...}'
+
+# CONFIGS (Resource Manager)
+GET  /v1/phantom_rm/configs
+GET  /v1/phantom_rm/configs/:platform_id
+PUT  /v1/phantom_rm/configs/:platform_id -d '{...}'
 ```
-Please refer to the [RESTful API documentation Web page][api] to get more details about EXCESS monitoring framework.
 
-# Monitoring
-
-Please refer to the [installation and monitoring guide][agent] of the monitoring agent in order to fill the database with data that then can be visualized and exported as JSON or CSV.
-
-
-## Known Issues
-
-### Error message `Unable to revive connection`
-
-Please set the attribute `keepAlive` to `false` when registering the Elasticsearch client in `app.js`:
-
-```javascript
-var client = new elasticsearch.Client({
-  host: 'localhost:9200',
-  log: 'error',
-  keepAlive: false
-});
-```
+Please refer to the [PHANTOM Monitoring API Web page][api] to get more details.
 
 
 ## Acknowledgment
-
-This project is realized through [EXCESS][excess]. EXCESS is funded by the EU 7th
-Framework Programme (FP7/2013-2016) under grant agreement number 611183. We are
-also collaborating with the European project [DreamCloud][dreamcloud].
+This project is realized through [EXCESS][excess] and [PHANTOM][phantom]. EXCESS is funded by the EU 7th Framework Programme (FP7/2013-2016) under grant agreement number 611183. The PHANTOM project receives funding under the European Union's Horizon 2020 Research and Innovation Programme under grant agreement number 688146.
 
 
 ## Contributing
 Find a bug? Have a feature request?
-Please [create](https://github.com/excess-project/monitoring-server/website/issues) an issue.
+Please [create](https://github.com/hpcfapix/phantom_monitoring_server/issues) an issue.
 
 
 ## Main Contributors
-
-**Dennis Hoppe, HLRS**
-+ [github/hopped](https://github.com/hopped)
-
 **Fangli Pi, HLRS**
 + [github/hpcfapix](https://github.com/hpcfapix)
 
-**Dmitry Khabi, HLRS**
-
-**Yosandra Sandoval, HLRS**
-
-**Anthony Sulisto, HLRS**
-
 
 ## Release History
-
 | Date        | Version | Comment          |
 | ----------- | ------- | ---------------- |
-| 2016-08-16  | 16.8    | New authentication and documentation |
-| 2016-06-22  | 16.6    | Bugfixes and new features |
-| 2016-02-26  | 16.2    | 2nd release (removed backend interface) |
-| 2015-12-18  | 1.0     | Public release.  |
+| 2017-03-28  | 1.0     | First prototype  |
 
 
 ## License
-Copyright (C) 2014-2016 University of Stuttgart
+Copyright (C) 2014-2017 University of Stuttgart
 
 [Apache License v2](LICENSE).
 
 
-[agent]: https://github.com/excess-project/monitoring-agent
+[client]: https://github.com/hpcfapix/phantom_monitoring_client
 [excess]: http://www.excess-project.eu
-[dreamcloud]: http://www.dreamcloud-project.eu
-[api]: http://excess-project.github.io/monitoring-server
+[phantom]: http://www.phantom-project.org
+[api]: https://phantom-monitoring-framework.github.io
