@@ -24,7 +24,7 @@ DIST_DIR=${BASE_DIR}/dist
 #
 # SOFTWARE
 #
-ELASTICSEARCH_VERSION="2.1.1"
+ELASTICSEARCH_VERSION="2.4.0"
 ELASTICSEARCH="elasticsearch-${ELASTICSEARCH_VERSION}"
 NODE_JS_VERSION="4.2.1"
 NODE_JS="node-v${NODE_JS_VERSION}-linux-x64"
@@ -81,6 +81,21 @@ then
 fi
 
 rm -rf ${TMP_DIR}
+
+sleep 10
+#
+# INSTALL NODE AND NPM and setup the environment
+#
+cd ${BASE_DIR}
+NODE_DIR=${DIST_DIR}/nodejs/bin
+NODE_BIN=${NODE_DIR}/node
+NPM_BIN=${DIST_DIR}/nodejs/bin/npm
+export PATH=${NODE_DIR}:${PATH}
+
+command -v ${NODE_BIN} >/dev/null 2>&1 || { echo " node  : Not installed. Aborting." >&2; exit 1; }
+command -v ${NPM_BIN} >/dev/null 2>&1 || { echo " npm  : Not installed. Aborting." >&2; exit 1; }
+
+${NPM_BIN} install
 
 echo "Done."
 echo

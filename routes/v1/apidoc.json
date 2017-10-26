@@ -1,20 +1,21 @@
 {
-  "name": "monitoring-api",
+  "name": "PHANTOM Monitoring API",
   "version": "1.0.0",
-  "description": "RESTful service of the EXCESS monitoring framework",
-  "title": "ATOM RESTful API",
-  "url" : "http://mf.excess-project.eu:3030/v1/mf",
+  "description": "RESTful service of the PHANTOM monitoring framework",
+  "title": "PHANTOM Monitoring API",
+  "url" : "http://mf.excess-project.eu:3033/v1/phantom_mf",
   "header": {
-    "title": "EXCESS Monitoring API"
+    "title": "PHANTOM Monitoring API"
   },
   "order": [
-    "Users",
-    "Profiles",
+    "Workflows",
     "Experiments",
+    "Runtime",
+    "Profiles",
     "Metrics",
     "Statistics",
-    "Units",
-    "Runtime"
+    "RM_Resources",
+    "RM_Configs"
   ],
   "template": {
   	"withCompare": true,

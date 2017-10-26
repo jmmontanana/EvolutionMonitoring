@@ -1,67 +1,181 @@
 var express = require('express');
 var router = express.Router();
+
 /**
- * @api {get} /statistics/:workflowID/:taskID 1. Request the statistics of a task with given workflow ID and task ID
+ * @api {get} /statistics/:workflowID 1. Get statistics of a metric across all tasks and experiments with given workflow ID
+ * @apiVersion 1.0.0
+ * @apiName GetStats
+ * @apiGroup Statistics
+ *
+ * @apiParam {String} workflowID    Identifier of a workflow
+ * @apiParam {String} metric        Name of a metric, e.g., metric=CPU0:core1
+ * @apiParam {String} [host]        Hostname of the system, e.g., host=node01
+ * @apiParam {String} [from]        Start time of the statistics, e.g., from=2016-05-10T17:35:57.610
+ * @apiParam {String} [to]          End time of the statistics, e.g., to=2016-05-10T17:35:57.610
+ *
+ * @apiExample {curl} Example usage:
+ *     curl -i 'http://mf.excess-project.eu:3033/v1/phantom_mf/statistics/ms2?metric=CPU0:core1'
+ *
+ * @apiSuccess {Object} workflow                     workflow-related data
+ * @apiSuccess {String} workflow.href                link to the stored workflow information
+ * @apiSuccess {String} metric                       name of the metric for which statistics are captured
+ * @apiSuccess {Object} statistics                   extended set of statistics as provided by Elasticsearch
+ * @apiSuccess {Number} statistics.count             number of metric values sampled
+ * @apiSuccess {Number} statistics.min               minimum value obtained for the given metric
+ * @apiSuccess {Number} statistics.max               maximum value obtained for the given metric
+ * @apiSuccess {Number} statistics.avg               average value across all metric values
+ * @apiSuccess {Number} statistics.sum               sum of all sampled metric values
+ * @apiSuccess {Number} statistics.sum_of_squares    sum of squares for the given metric values
+ * @apiSuccess {Number} statistics.variance          variance of the given metric
+ * @apiSuccess {Number} statistics.std_deviation     standard deviation computed for the given metric
+ * @apiSuccess {Object} statistics.std_deviation_bounds          deviation bounds of the given metric
+ * @apiSuccess {Number} statistics.std_deviation_bounds.upper    deviation upper bounds
+ * @apiSuccess {Number} statistics.std_deviation_bounds.lower    deviation lower bounds
+ * @apiSuccess {Object} min                          minimum point of the metrics data
+ * @apiSuccess {String} min.local_timestamp          local time, when the the minimum metric value is sampled
+ * @apiSuccess {String} min.server_timestamp         server time, when the the minimum metric value is received by the server
+ * @apiSuccess {String} min.host                     hostname of the target platform
+ * @apiSuccess {String} min.TaskID                   identifier of the task
+ * @apiSuccess {String} min.type                     type of plug-in the metric is associated with
+ * @apiSuccess {String} min.metric                   metric value associated with a given metric name
+ * @apiSuccess {Object} max                          maximum point of the metrics data
+ * @apiSuccess {String} max.local_timestamp          local time, when the the maximum metric value is sampled
+ * @apiSuccess {String} min.server_timestamp         server time, when the the maximum metric value is received by the server
+ * @apiSuccess {String} max.host                     hostname of the target platform
+ * @apiSuccess {String} max.TaskID                   identifier of the task
+ * @apiSuccess {String} max.type                     type of plug-in the metric is associated with
+ * @apiSuccess {String} max.metric                   metric value associated with a given metric name
+ *
+ * @apiSuccessExample Success-Response:
+ *     HTTP/1.1 200 OK
+ *     {
+ *        "workflow": {
+ *           "href": "http://mf.excess-project.eu:3033/v1/phantom_mf/workflows/ms2"
+ *        },
+ *        "metric": "CPU0:core1",
+ *        "statistics": {
+ *           "count": 1272,
+ *           "min": 25,
+ *           "max": 30,
+ *           "avg": 27.19575471698,
+ *           "sum": 34593,
+ *           "sum_of_squares": 941499,
+ *           "variance": 0.56309518,
+ *           "std_deviation": 0.750396685173416,
+ *           "std_deviation_bounds": {
+ *              "upper": 28.69654808732796,
+ *              "lower": 25.6949613466343
+ *           }
+ *        },
+ *        "min": {
+ *           "@timestamp": "2016-05-17T16:25:48.123",
+ *           "host": "node01.excess-project.eu",
+ *           "task": "t1",
+ *           "type": "performance",
+ *           "CPU0:core0": 26,
+ *           "CPU0:core1": 25,
+ *           ...
+ *        },
+ *        "max": {
+ *           ...
+ *        }
+ *     }
+ *
+ * @apiError NoResults response is empty for the metric.
+ *
+ * @apiErrorExample Error-Response:
+ *     HTTP/1.1 200 OK
+ *     {
+ *       "error": "response is empty for the metric."
+ *     }
+ */
+router.get('/:workflowID', function(req, res, next) {
+    var workflowID = req.params.workflowID.toLowerCase(),
+        index = workflowID + '_*';
+
+    return handle_response(req, res, next, index);
+});
+
+/**
+ * @api {get} /statistics/:workflowID/:taskID 2. Get statistics of a metric across all experiments with given workflow ID and task ID
  * @apiVersion 1.0.0
  * @apiName GetStatsTask
  * @apiGroup Statistics
  *
- * @apiParam {String} workflowID identifer of a workflow
- * @apiParam {String} taskID identifier of a task
- * @apiParam {String} metric name of a metric
- * @apiParam {String} [host] hostname of the system
- * @apiParam {String} [from] start time of the statistics
- * @apiParam {String} [to] end time of the statistics
+ * @apiParam {String} workflowID    Identifier of a workflow
+ * @apiParam {String} taskID        Identifier of a task
+ * @apiParam {String} metric        Name of a metric, e.g., metric=CPU0:core1
+ * @apiParam {String} [host]        Hostname of the system, e.g., host=node01
+ * @apiParam {String} [from]        Start time of the statistics, e.g., from=2016-05-10T17:35:57.610
+ * @apiParam {String} [to]          End time of the statistics, e.g., to=2016-05-10T17:35:57.610
  *
  * @apiExample {curl} Example usage:
- *     curl -i 'http://mf.excess-project.eu:3030/v1/mf/statistics/hpcfapix/vector_scal01?metric=DRAM_POWER:PACKAGE0&metric=DRAM_POWER:PACKAGE1&host=node01&from=2016-05-10T17:35:57.610&to=2016-05-10T17:36:57.610'
+ *     curl -i 'http://mf.excess-project.eu:3033/v1/phantom_mf/statistics/ms2/t1?metric=metric=CPU0:core1&from=2016-05-10T17:35:57.610&to=2016-05-10T17:36:57.610'
  *
- * @apiSuccess {Object} user link to the user
- * @apiSuccess {String} metric name of the metric
- * @apiSuccess {Object} statistics statistics of the metric during the time interval
- * @apiSuccess {Object} min minimum measurement during the time interval
- * @apiSuccess {Object} max maximum measurement during the time interval
+ * @apiSuccess {Object} workflow                     workflow-related data
+ * @apiSuccess {String} workflow.href                link to the stored workflow information
+ * @apiSuccess {String} metric                       name of the metric for which statistics are captured
+ * @apiSuccess {Object} statistics                   extended set of statistics as provided by Elasticsearch
+ * @apiSuccess {Number} statistics.count             number of metric values sampled
+ * @apiSuccess {Number} statistics.min               minimum value obtained for the given metric
+ * @apiSuccess {Number} statistics.max               maximum value obtained for the given metric
+ * @apiSuccess {Number} statistics.avg               average value across all metric values
+ * @apiSuccess {Number} statistics.sum               sum of all sampled metric values
+ * @apiSuccess {Number} statistics.sum_of_squares    sum of squares for the given metric values
+ * @apiSuccess {Number} statistics.variance          variance of the given metric
+ * @apiSuccess {Number} statistics.std_deviation     standard deviation computed for the given metric
+ * @apiSuccess {Object} statistics.std_deviation_bounds          deviation bounds of the given metric
+ * @apiSuccess {Number} statistics.std_deviation_bounds.upper    deviation upper bounds
+ * @apiSuccess {Number} statistics.std_deviation_bounds.lower    deviation lower bounds
+ * @apiSuccess {Object} min                          minimum point of the metrics data
+ * @apiSuccess {String} min.local_timestamp          local time, when the the minimum metric value is sampled
+ * @apiSuccess {String} min.server_timestamp         server time, when the the minimum metric value is received by the server
+ * @apiSuccess {String} min.host                     hostname of the target platform
+ * @apiSuccess {String} min.TaskID                   identifier of the task
+ * @apiSuccess {String} min.type                     type of plug-in the metric is associated with
+ * @apiSuccess {String} min.metric                   metric value associated with a given metric name
+ * @apiSuccess {Object} max                          maximum point of the metrics data
+ * @apiSuccess {String} max.local_timestamp          local time, when the the maximum metric value is sampled
+ * @apiSuccess {String} min.server_timestamp         server time, when the the maximum metric value is received by the server
+ * @apiSuccess {String} max.host                     hostname of the target platform
+ * @apiSuccess {String} max.TaskID                   identifier of the task
+ * @apiSuccess {String} max.type                     type of plug-in the metric is associated with
+ * @apiSuccess {String} max.metric                   metric value associated with a given metric name
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
- *     [
- *        {
- *            "user":
- *                   {"href":"http://mf.excess-project.eu:3030/v1/mf/users/hpcfapix"},
- *            "metric":"DRAM_POWER:PACKAGE0",
- *            "statistics":
- *                   {"count":6,
- *                    "min":1.5568,
- *                    "max":1.5724,
- *                    "avg":1.5640333333333334,
- *                    "sum":9.3842,
- *                    "sum_of_squares":14.677405239999999,
- *                    "variance":0.000033938888888881045,
- *                    "std_deviation":0.0058257093034995355,
- *                    "std_deviation_bounds":
- *                           {"upper":1.5756847519403325,
- *                            "lower":1.5523819147263342}
- *                   },
- *            "min":
- *                   {"@timestamp":"2016-05-10T17:36:00.851",
- *                    "host":"node01.excess-project.eu",
- *                    "task":"vector_scal01",
- *                    "type":"energy",
- *                    "DRAM_ENERGY:PACKAGE0":1.5573,
- *                    "DRAM_POWER:PACKAGE0":1.5568,
- *                    "DRAM_ENERGY:PACKAGE1":1.5584,
- *                    "DRAM_POWER:PACKAGE1":1.5578}
- *            "max":{
- *                    "@timestamp":"2016-05-10T17:35:57.610",
- *                    "host":"node01.excess-project.eu",
- *                    "task":"vector_scal01",
- *                    "type":"energy",
- *                    "DRAM_ENERGY:PACKAGE0":1.5727,
- *                    "DRAM_POWER:PACKAGE0":1.5724,
- *                    "DRAM_ENERGY:PACKAGE1":1.5692,
- *                    "DRAM_POWER:PACKAGE1":1.5689}
+ *     {
+ *        "workflow": {
+ *           "href": "http://mf.excess-project.eu:3033/v1/phantom_mf/workflows/ms2"
+ *        },
+ *        "metric": "CPU0:core1",
+ *        "statistics": {
+ *           "count": 1272,
+ *           "min": 25,
+ *           "max": 30,
+ *           "avg": 27.19575471698,
+ *           "sum": 34593,
+ *           "sum_of_squares": 941499,
+ *           "variance": 0.56309518,
+ *           "std_deviation": 0.750396685173416,
+ *           "std_deviation_bounds": {
+ *              "upper": 28.69654808732796,
+ *              "lower": 25.6949613466343
+ *           }
+ *        },
+ *        "min": {
+ *           "@timestamp": "2016-05-17T16:25:48.123",
+ *           "host": "node01.excess-project.eu",
+ *           "task": "t1",
+ *           "type": "performance",
+ *           "CPU0:core0": 26,
+ *           "CPU0:core1": 25,
+ *           ...
+ *        },
+ *        "max": {
+ *           ...
  *        }
- *     ]
+ *     }
  *
  * @apiError NoResults response is empty for the metric.
  *
@@ -80,68 +194,87 @@ router.get('/:workflowID/:taskID', function(req, res, next) {
 });
 
 /**
- * @api {get} /statistics/:workflowID/:taskID/:experimentID 2. Request the statistics of an experiment with given workflow ID, task ID and experiment ID
+ * @api {get} /statistics/:workflowID/:taskID/:experimentID 3. Get statistics of a metric with given workflow ID, task ID and experiment ID
  * @apiVersion 1.0.0
  * @apiName GetStatsExperiment
  * @apiGroup Statistics
  *
- * @apiParam {String} workflowID identifer of a workflow
- * @apiParam {String} taskID identifier of a task
- * @apiParam {String} experimentID identifier of an experiment
- * @apiParam {String} metric name of a metric
- * @apiParam {String} [host] hostname of the system
- * @apiParam {String} [from] start time of the statistics
- * @apiParam {String} [to] end time of the statistics
+ * @apiParam {String} workflowID    Identifier of a workflow
+ * @apiParam {String} taskID        Identifier of a task
+ * @apiParam {String} experimentID  Identifier of an experiment
+ * @apiParam {String} metric        Name of a metric, e.g., metric=CPU0:core1
+ * @apiParam {String} [host]        Hostname of the system, e.g., host=node01
+ * @apiParam {String} [from]        Start time of the statistics, e.g., from=2016-05-10T17:35:57.610
+ * @apiParam {String} [to]          End time of the statistics, e.g., to=2016-05-10T17:35:57.610
  *
  * @apiExample {curl} Example usage:
- *     curl -i 'http://mf.excess-project.eu:3030/v1/mf/statistics/hpcfapix/vector_scal01/AVSbT0ChGMPeuCn4QYjq?metric=DRAM_POWER:PACKAGE0&metric=DRAM_POWER:PACKAGE1&host=node01&from=2016-05-10T17:35:57.610&to=2016-05-10T17:36:57.610'
+ *     curl -i 'http://mf.excess-project.eu:3033/v1/phantom_mf/statistics/ms2/t1/AVqkW4L57rO13ZBQKOWJ?metric=metric=CPU0:core1'
  *
- * @apiSuccess {Object} user link to the user
- * @apiSuccess {String} metric name of the metric
- * @apiSuccess {Object} statistics statistics of the metric during the time interval
- * @apiSuccess {Object} min minimum measurement during the time interval
- * @apiSuccess {Object} max maximum measurement during the time interval
+ * @apiSuccess {Object} workflow                     workflow-related data
+ * @apiSuccess {String} workflow.href                link to the stored workflow information
+ * @apiSuccess {String} metric                       name of the metric for which statistics are captured
+ * @apiSuccess {Object} statistics                   extended set of statistics as provided by Elasticsearch
+ * @apiSuccess {Number} statistics.count             number of metric values sampled
+ * @apiSuccess {Number} statistics.min               minimum value obtained for the given metric
+ * @apiSuccess {Number} statistics.max               maximum value obtained for the given metric
+ * @apiSuccess {Number} statistics.avg               average value across all metric values
+ * @apiSuccess {Number} statistics.sum               sum of all sampled metric values
+ * @apiSuccess {Number} statistics.sum_of_squares    sum of squares for the given metric values
+ * @apiSuccess {Number} statistics.variance          variance of the given metric
+ * @apiSuccess {Number} statistics.std_deviation     standard deviation computed for the given metric
+ * @apiSuccess {Object} statistics.std_deviation_bounds          deviation bounds of the given metric
+ * @apiSuccess {Number} statistics.std_deviation_bounds.upper    deviation upper bounds
+ * @apiSuccess {Number} statistics.std_deviation_bounds.lower    deviation lower bounds
+ * @apiSuccess {Object} min                          minimum point of the metrics data
+ * @apiSuccess {String} min.local_timestamp          local time, when the the minimum metric value is sampled
+ * @apiSuccess {String} min.server_timestamp         server time, when the the minimum metric value is received by the server
+ * @apiSuccess {String} min.host                     hostname of the target platform
+ * @apiSuccess {String} min.TaskID                   identifier of the task
+ * @apiSuccess {String} min.type                     type of plug-in the metric is associated with
+ * @apiSuccess {String} min.metric                   metric value associated with a given metric name
+ * @apiSuccess {Object} max                          maximum point of the metrics data
+ * @apiSuccess {String} max.local_timestamp          local time, when the the maximum metric value is sampled
+ * @apiSuccess {String} min.server_timestamp         server time, when the the maximum metric value is received by the server
+ * @apiSuccess {String} max.host                     hostname of the target platform
+ * @apiSuccess {String} max.TaskID                   identifier of the task
+ * @apiSuccess {String} max.type                     type of plug-in the metric is associated with
+ * @apiSuccess {String} max.metric                   metric value associated with a given metric name
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
- *     [
- *        {
- *            "user":
- *                   {"href":"http://mf.excess-project.eu:3030/v1/mf/users/hpcfapix"},
- *            "metric":"DRAM_POWER:PACKAGE0",
- *            "statistics":
- *                   {"count":6,
- *                    "min":1.5568,
- *                    "max":1.5724,
- *                    "avg":1.5640333333333334,
- *                    "sum":9.3842,
- *                    "sum_of_squares":14.677405239999999,
- *                    "variance":0.000033938888888881045,
- *                    "std_deviation":0.0058257093034995355,
- *                    "std_deviation_bounds":
- *                           {"upper":1.5756847519403325,
- *                            "lower":1.5523819147263342}
- *                   },
- *            "min":
- *                   {"@timestamp":"2016-05-10T17:36:00.851",
- *                    "host":"node01.excess-project.eu",
- *                    "task":"vector_scal01",
- *                    "type":"energy",
- *                    "DRAM_ENERGY:PACKAGE0":1.5573,
- *                    "DRAM_POWER:PACKAGE0":1.5568,
- *                    "DRAM_ENERGY:PACKAGE1":1.5584,
- *                    "DRAM_POWER:PACKAGE1":1.5578}
- *            "max":{
- *                    "@timestamp":"2016-05-10T17:35:57.610",
- *                    "host":"node01.excess-project.eu",
- *                    "task":"vector_scal01",
- *                    "type":"energy",
- *                    "DRAM_ENERGY:PACKAGE0":1.5727,
- *                    "DRAM_POWER:PACKAGE0":1.5724,
- *                    "DRAM_ENERGY:PACKAGE1":1.5692,
- *                    "DRAM_POWER:PACKAGE1":1.5689}
+ *     {
+ *        "workflow": {
+ *           "href": "http://mf.excess-project.eu:3033/v1/phantom_mf/workflows/ms2"
+ *        },
+ *        "metric": "CPU0:core1",
+ *        "statistics": {
+ *           "count": 1272,
+ *           "min": 25,
+ *           "max": 30,
+ *           "avg": 27.19575471698,
+ *           "sum": 34593,
+ *           "sum_of_squares": 941499,
+ *           "variance": 0.56309518,
+ *           "std_deviation": 0.750396685173416,
+ *           "std_deviation_bounds": {
+ *              "upper": 28.69654808732796,
+ *              "lower": 25.6949613466343
+ *           }
+ *        },
+ *        "min": {
+ *           "@timestamp": "2016-05-17T16:25:48.123",
+ *           "host": "node01.excess-project.eu",
+ *           "task": "t1",
+ *           "type": "performance",
+ *           "CPU0:core0": 26,
+ *           "CPU0:core1": 25,
+ *           ...
+ *        },
+ *        "max": {
+ *           ...
  *        }
- *     ]
+ *     }
+ *
  *
  * @apiError NoResults response is empty for the metric.
  *
@@ -162,7 +295,7 @@ router.get('/:workflowID/:taskID/:experimentID', function(req, res, next) {
 
 function handle_response(req, res, next, index, type) {
     var client = req.app.get('elastic'),
-      mf_server = req.app.get('mf_server') + '/mf',
+      mf_server = req.app.get('mf_server') + '/phantom_mf',
       workflowID = req.params.workflowID.toLowerCase(),
       host = req.query.host,
       metric = req.query.metric,
@@ -200,37 +333,46 @@ function handle_response(req, res, next, index, type) {
                 res.json(error);
                 return;
             }
-            var metrics = [],
-                answers = [];
-            if (typeof(metric) == "string") {
-                metrics[0] = metric;
-            }
             else {
-                metrics = metric;
-            }
-            for (var key in metrics) {
-                var answer = {},
-                    aggs = response.aggregations;
-                answer['user'] = {};
-                answer['user'].href = mf_server + '/users/' + workflowID;
-                answer['metric'] = metrics[key];
+                if(response.aggregations !== undefined) {
+                    var metrics = [],
+                        answers = [];
+                    if (typeof(metric) == "string") {
+                        metrics[0] = metric;
+                    }
+                    else {
+                        metrics = metric;
+                    }
+                    for (var key in metrics) {
+                        var answer = {},
+                            aggs = response.aggregations;
+                        answer['workflow'] = {};
+                        answer['workflow'].href = mf_server + '/workflows/' + workflowID;
+                        answer['metric'] = metrics[key];
 
-                if (is_defined(from) && is_defined(to)) {
-                    aggs = aggs['filtered_stats'];
-                }
-                if(aggs['Minimum_' + metrics[key]]['hits']['total'] == 0) {
-                        var json = {};
-                        json.error = "response is empty for the metric";
-                        answers.push(json);
+                        if (is_defined(from) && is_defined(to)) {
+                            aggs = aggs['filtered_stats'];
+                        }
+                        if(aggs['Minimum_' + metrics[key]]['hits']['total'] == 0) {
+                                var json = {};
+                                json.error = "response is empty for the metric";
+                                answers.push(json);
+                        }
+                        else {
+                            answer['statistics'] = aggs[metrics[key] + '_Stats'];
+                            answer['min'] = aggs['Minimum_' + metrics[key]]['hits']['hits'][0]['_source'];
+                            answer['max'] = aggs['Maximum_' + metrics[key]]['hits']['hits'][0]['_source'];
+                            answers.push(answer);
+                        }
+                    }
+                    res.json(answers);        
                 }
                 else {
-                    answer['statistics'] = aggs[metrics[key] + '_Stats'];
-                    answer['min'] = aggs['Minimum_' + metrics[key]]['hits']['hits'][0]['_source'];
-                    answer['max'] = aggs['Maximum_' + metrics[key]]['hits']['hits'][0]['_source'];
-                    answers.push(answer);
+                    var json = {};
+                    json.error = "index " + index +" is not found in DB";
+                    res.json(json);
                 }
             }
-            res.json(answers);
         });
     });
 }
@@ -273,7 +415,7 @@ function date_filter(from, to) {
         filter =
             '{ ' +
                 '"range": {' +
-                    '"@timestamp": {' +
+                    '"local_timestamp": {' +
                         '"from": "' + from + '",' +
                         '"to": "' + to + '"' +
                     '}' +

@@ -28,27 +28,31 @@ mkdir -p ${TMP_DIR}
 
 echo "Checking ..."
 echo "> elasticsearch"
-ELASTICSEARCH_BIN=${DIST_DIR}/elasticsearch/bin/elasticsearch
+
+ES_HOME=${DIST_DIR}/elasticsearch
+ELASTICSEARCH_BIN=${ES_HOME}/bin/elasticsearch
+cp ${BASE_DIR}/elasticsearch.yml ${ES_HOME}/config/elasticsearch.yml
+
 command -v ${ELASTICSEARCH_BIN} >/dev/null 2>&1 || { echo " elasticsearch : Not installed. Aborting." >&2; exit 1; }
 
-RESULT=$(netstat -lnt | awk '$6 == "LISTEN" && $4 ~ ":9200"')
+RESULT=$(netstat -lnt | awk '$6 == "LISTEN" && $4 ~ ":9400"')
 if [[ -z "${RESULT// }" ]]
 then
     nohup ${ELASTICSEARCH_BIN} >/dev/null 2>&1 &
     echo $! > ${TMP_DIR}/elasticsearch.pid
 else
-    echo "> port 9200 already bound by another process. We assume that Elasticsearch is already running."
+    echo "> port 9400 already bound by another process. We assume that Elasticsearch is already running."
 fi
 
 sleep 10
 
-HTTP_STATUS=$(curl -s -w %{http_code} localhost:9200)
+HTTP_STATUS=$(curl -s -w %{http_code} localhost:9400)
 if [[ ${HTTP_STATUS} != *"200"* ]]
 then
     echo "> Elasticsearch is unreachable. Aborting."
     exit 1;
 fi
-echo "Done. Elasticsearch started successfully on port 9200."
+echo "Done. Elasticsearch started successfully on port 9400."
 echo
 
 echo "Starting the monitoring server ..."
@@ -63,5 +67,5 @@ command -v ${NPM_BIN} >/dev/null 2>&1 || { echo " npm  : Not installed. Aborting
 ${NPM_BIN} install
 nohup ./bin/www >/dev/null 2>&1 &
 echo $! > ${TMP_DIR}/node.pid
-echo "Done. Server is listening on port 3030."
+echo "Done. Server is listening on port 3033."
 echo

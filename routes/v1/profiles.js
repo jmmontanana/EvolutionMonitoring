@@ -1,39 +1,40 @@
 var express = require('express');
+var dateFormat = require('dateformat');
 var router = express.Router();
 var async = require('async');
 
 /**
- * @api {get} /profiles/:workflowID 1. Request a list of profiled tasks with given workflow ID
+ * @api {get} /profiles/:workflowID 1. Get a list of the profiled tasks and experiments with given workflow ID
  * @apiVersion 1.0.0
  * @apiName GetProfilesWorkflow
  * @apiGroup Profiles
  *
- * @apiParam {String} workflowID identifer of a workflow
+ * @apiParam {String} workflowID    Identifier of a workflow
  *
  * @apiExample {curl} Example usage:
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy
  *
- * @apiSuccess {Object} taskID identifier of a registered task
- * @apiSuccess {Object} taskID.experimentID identifier of an experiment
- * @apiSuccess {String} taskID.experimentID.href link to the experiment
+ * @apiSuccess {Object} taskID                    Identifier of a registered task
+ * @apiSuccess {Object} taskID.experimentID       Identifier of an experiment
+ * @apiSuccess {String} taskID.experimentID.href  Link to the experiment
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
  *     {
- *       "vector_scal01":{
+ *       "t1":{
  *          "AVSf5_wVGMPeuCn4Qdw2":{
- *                "href":"http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01/AVSf5_wVGMPeuCn4Qdw2"
+ *                "href":"http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t1/AVSf5_wVGMPeuCn4Qdw2"
  *          },
  *          "AVSf-mU4GMPeuCn4Qd0L":{
- *                "href":"http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01/AVSf-mU4GMPeuCn4Qd0L"
+ *                "href":"http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t1/AVSf-mU4GMPeuCn4Qd0L"
  *          }
  *       },
- *       "mfnode01":{
+ *       "t2":{
  *          "AVXAMB5FLeaeU4rxyi3w":{
- *                "href":"http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/mfnode01/AVXAMB5FLeaeU4rxyi3w"
+ *                "href":"http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t2/AVXAMB5FLeaeU4rxyi3w"
  *          },
  *          "AVVT4dhwenoRsEhyDkeb":{
- *                "href":"http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/mfnode01/AVVT4dhwenoRsEhyDkeb"
+ *                "href":"http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t2/AVVT4dhwenoRsEhyDkeb"
  *          }
  *       }
  *     }
@@ -50,14 +51,7 @@ router.get('/:workID', function(req, res, next) {
     var client = req.app.get('elastic'),
       mf_server = req.app.get('mf_server'),
       workflow = req.params.workID.toLowerCase(),
-      dreamcloud = req.query.dreamcloud,
       json = {};
-
-    if (is_defined(dreamcloud)) {
-        mf_server = mf_server + '/dreamcloud/mf';
-    } else {
-        mf_server = mf_server + '/mf';
-    }
 
     client.indices.getSettings({
         index: workflow + '*',
@@ -90,10 +84,10 @@ router.get('/:workID', function(req, res, next) {
                             var item = {};
                             // remove in prod. mode
                             if (typeof task !== 'undefined') {
-                                item.href = mf_server + '/profiles/' + workflow + '/' + task + '/' + mappings[i];
+                                item.href = mf_server + '/phantom_mf/profiles/' + workflow + '/' + task + '/' + mappings[i];
                                 json[task][mappings[i]] = item;
                             } else {
-                                item.href = mf_server +  '/profiles/' + workflow + '/' + mappings[i];
+                                item.href = mf_server +  '/phantom_mf/profiles/' + workflow + '/' + mappings[i];
                                 json[mappings[i]] = item;
                             }
                         }
@@ -131,38 +125,38 @@ function isEmpty(obj) {
 }
 
 /**
- * @api {get} /profiles/:workflowID/:taskID 2. Request a list of profiled experiments with given workflow ID and task ID
+ * @api {get} /profiles/:workflowID/:taskID 2. Get a list of the profiled experiments with given workflow ID and task ID
  * @apiVersion 1.0.0
  * @apiName GetProfilesTask
  * @apiGroup Profiles
  *
- * @apiParam {String} workflowID identifer of a workflow
- * @apiParam {String} taskID identifier of a registered task
+ * @apiParam {String} workflowID     Identifier of a workflow
+ * @apiParam {String} taskID         Identifier of a registered task
  *
  * @apiExample {curl} Example usage:
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t1
  *
- * @apiSuccess {Object} date date, when the task is registered
- * @apiSuccess {Object} date.experimentID identifier of an experiment
- * @apiSuccess {String} date.experimentID.href link to the experiment
+ * @apiSuccess {Object} date                    Date, when the task is registered
+ * @apiSuccess {Object} date.experimentID       Identifier of an experiment
+ * @apiSuccess {String} date.experimentID.href  Link to the experiment
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
  *     {
  *       "2016-05-11":{
  *          "AVSf5_wVGMPeuCn4Qdw2":{
- *                "href":"http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01/AVSf5_wVGMPeuCn4Qdw2"
+ *                "href":"http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t1/AVSf5_wVGMPeuCn4Qdw2"
  *          },
  *          "AVSf-mU4GMPeuCn4Qd0L":{
- *                "href":"http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01/AVSf-mU4GMPeuCn4Qd0L"
+ *                "href":"http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t1/AVSf-mU4GMPeuCn4Qd0L"
  *          }
  *       },
  *       "2016-05-10":{
  *          "AVXAMB5FLeaeU4rxyi3w":{
- *                "href":"http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01/AVXAMB5FLeaeU4rxyi3w"
+ *                "href":"http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t1/AVXAMB5FLeaeU4rxyi3w"
  *          },
  *          "AVVT4dhwenoRsEhyDkeb":{
- *                "href":"http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01/AVVT4dhwenoRsEhyDkeb"
+ *                "href":"http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t1/AVVT4dhwenoRsEhyDkeb"
  *          }
  *       }
  *     }
@@ -172,23 +166,16 @@ function isEmpty(obj) {
  * @apiErrorExample Error-Response:
  *     HTTP/1.1 500 Internal Sever Error
  *     {
- *       "error": "no such index."
+ *       "error": "Task not found."
  *     }
  */
 router.get('/:workID/:taskID', function(req, res, next) {
     var client = req.app.get('elastic'),
       workflow = req.params.workID.toLowerCase(),
-      mf_server = req.app.get('mf_server'),
-      dreamcloud = req.query.dreamcloud,
       task = req.params.taskID.toLowerCase(),
+      mf_server = req.app.get('mf_server'),
       size = 1000,
       json = {};
-
-    if (is_defined(dreamcloud)) {
-        mf_server = mf_server + '/dreamcloud/mf';
-    } else {
-        mf_server = mf_server + '/mf';
-    }
 
     // assign default taskID when application has no workflow
     if (!is_defined(task)) {
@@ -220,7 +207,7 @@ router.get('/:workID/:taskID', function(req, res, next) {
                     if (response.found) {
                         var result = response._source,
                           timestamp = result.timestamp,
-                          href = mf_server + '/profiles/' + workflow + '/' + task + '/' + experimentID;
+                          href = mf_server + '/phantom_mf/profiles/' + workflow + '/' + task + '/' + experimentID;
                         var element = {};
                         element.href = href;
                         if (typeof timestamp !== 'undefined') {
@@ -256,49 +243,51 @@ router.get('/:workID/:taskID', function(req, res, next) {
 });
 
 /**
- * @api {get} /profiles/:workflowID/:taskID/:experimentID 3. Request a profiled experiment with given workflow ID, task ID and experiment ID
+ * @api {get} /profiles/:workflowID/:taskID/:experimentID 3. Get the profiled metrics with given workflow ID, task ID and experiment ID
  * @apiVersion 1.0.0
  * @apiName GetProfilesExperiment
  * @apiGroup Profiles
  *
- * @apiParam {String} workflowID identifer of a workflow
- * @apiParam {String} taskID identifier of a registered task
- * @apiParam {String} experimentID identifier of an experiment
+ * @apiParam {String} workflowID      Identifier of a workflow
+ * @apiParam {String} taskID          Identifier of a registered task
+ * @apiParam {String} experimentID    Identifier of an experiment
+ * @apiParam {String} [from]          Time filter, starting point of the metrics collection time (if not given, starting point is 5 min from current time)
+ * @apiParam {String} [to]            Time filter, ending point of the metrics collection time (if not given, ending point is the current time)
  *
  * @apiExample {curl} Example usage:
- *     curl -i http://mf.excess-project.eu:3030/v1/mf/profiles/hpcfapix/vector_scal01/AVSbT0ChGMPeuCn4QYjq
+ *     curl -i http://mf.excess-project.eu:3033/v1/phantom_mf/profiles/dummy/t1/AVSbT0ChGMPeuCn4QYjq
  *
- * @apiSuccess {Object} Metrics measurements based on a system
- * @apiSuccess {String} Metrics.timestamp timestamp, when the metric data is collected
- * @apiSuccess {String} Metrics.host hostname of the system
- * @apiSuccess {String} Metrics.task task identifier
- * @apiSuccess {String} Metrics.type metrics type
- * @apiSuccess {Number} Metrics.metric value of the specific metric
+ * @apiSuccess {Object} Metrics                     Measurements of an experiment based on the system
+ * @apiSuccess {String} Metrics.local_timestamp     Local time, when the metric data is collected
+ * @apiSuccess {String} Metrics.server_timestamp    Server time, when the metric data is received by the server
+ * @apiSuccess {String} Metrics.host                Hostname of the target system
+ * @apiSuccess {String} Metrics.type                Type of the metric, e.g. power, temperature, and so on
+ * @apiSuccess {Number} Metrics.metric              Name and value of the metric
  *
  * @apiSuccessExample Success-Response:
  *     HTTP/1.1 200 OK
  *     [
  *         {
- *          "@timestamp":"2016-05-10T17:35:59.576",
+ *          "local_timestamp":"2016-05-10T17:35:59.576",
+ *          "server_timestamp":"2016-05-10T17:36:01.541",
  *          "host":"node01.excess-project.eu",
- *          "task":"vector_scal01",
  *          "type":"energy",
  *          "DRAM_ENERGY:PACKAGE0":1.5715,
  *          "DRAM_POWER:PACKAGE0":1.571,
  *         },{
- *           "@timestamp":"2016-05-10T17:35:59.708",
- *           "host":"node01.excess-project.eu",
- *           "task":"vector_scal01",
- *           "type":"memory",
- *           "MemTotal":32771284,
- *           "MemFree":31720604
+ *          "local_timestamp":"2016-05-10T17:35:59.708",
+ *          "server_timestamp":"2016-05-10T17:36:01.541",
+ *          "host":"node01.excess-project.eu",
+ *          "type":"memory",
+ *          "MemTotal":32771284,
+ *          "MemFree":31720604
  *         },{
- *           "@timestamp":"2016-05-10T17:35:59.831",
- *           "host":"node01.excess-project.eu",
- *           "task":"vector_scal01",
- *           "type":"temperature",
- *           "CPU1_Core 1":30,
- *           "CPU1_Core 0":25
+ *          "local_timestamp":"2016-05-10T17:35:59.831",
+ *          "server_timestamp":"2016-05-10T17:36:01.541",
+ *          "host":"node01.excess-project.eu",
+ *          "type":"temperature",
+ *          "CPU1_Core 1":30,
+ *          "CPU1_Core 0":25
  *         }
  *     ]
  *
@@ -316,14 +305,38 @@ router.get('/:workID/:taskID/:expID', function(req, res, next) {
       task = req.params.taskID.toLowerCase(),
       experiment = req.params.expID,
       filter = req.query.filter,
+      from = req.query.from,
+      to = req.query.to,
       size = 1000,
       json = [];
 
     var index = workflow + '_' + task;
 
+    /* if from or to timestamps are not given:
+       get the metrics in the last 5 minutes */
+    if (!is_defined(from) || !is_defined(to)) {
+        time_now = new Date();
+        to = dateFormat(time_now, "yyyy-mm-dd'T'HH:MM:ss.l");
+        from = dateFormat(new Date(time_now.valueOf() - 5 * 60000), "yyyy-mm-dd'T'HH:MM:ss.l"); // from is 5 minutes before to
+    }
+
+    var body = '{"query": {' +
+                '"filtered": {' +
+                    '"filter": {' +
+                        '"range": {' + 
+                            '"local_timestamp": {' + 
+                                '"from": "' + from + '",' + 
+                                '"to": "' + to + '"' +
+                                '}' +
+                            '}' + 
+                        '}' +
+                    '}' +
+                '}}';
+
     client.search({
         index: index,
         type: experiment,
+        body: body,
         searchType: 'count'
     }, function(error, response) {
         if (error) {
@@ -337,6 +350,7 @@ router.get('/:workID/:taskID/:expID', function(req, res, next) {
         client.search({
             index: index,
             type: experiment,
+            body: body,
             size: size
         }, function(error, response) {
             if (error) {
